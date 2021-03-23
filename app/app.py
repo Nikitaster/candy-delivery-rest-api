@@ -55,8 +55,8 @@ orders_model = Table(
     'orders',
     metadata,
     
-    Column('id', Integer, primary_key=True),
-    Column('courier_id', Integer, ForeignKey('couriers.courier_id'), nullable=False),
+    Column('order_id', Integer, primary_key=True),
+    Column('courier_id', Integer, ForeignKey('couriers.courier_id'), nullable=True),
     Column('weight', Float, nullable=False),
     Column('region', Integer, nullable=False),
     Column('delivery_hours', ARRAY(String)),
@@ -80,14 +80,17 @@ class Courier(BaseModel):
 class CouriersList(BaseModel):
     list_couriers: List[Courier] = Field(..., alias='data')
 
-class Orders(BaseModel):
-    # id: int
-    courier_id: int
-    weight: float
+class Order(BaseModel):
+    order_id: int
+    courier_id: int = None
+    weight: float = Field(..., ge=0.01, le=50)
     region: int
     delivery_hours: List[str]
     assign_time: datetime = None
     completed_at: datetime = None
+
+class OrdersList(BaseModel):
+    list_orders: List[Order] = Field(..., alias='data')
 
 app = FastAPI()
 
@@ -120,7 +123,7 @@ async def get_couriers_types_dict():
         for t in courier_types:
             couriers_types_dict[t['name']] = t['id']
     except Exception as e:
-        print(JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=e.json()))
+        print(e.args)
     return couriers_types_dict
 
 @app.post("/couriers")
@@ -185,7 +188,7 @@ async def couriers_edit(courier_id: int, request: Request) -> JSONResponse:
             if 'courier_type' in request_json.keys():
                 courier.courier_type = request_json['courier_type']
 
-            # update db db 
+            # update db
             update_dict = courier.dict()
             update_dict['courier_type'] = couriers_types_dict[courier.courier_type]
             await database.execute(couriers_model.update().where(couriers_model.c.courier_id == courier_id), values=update_dict)
@@ -197,3 +200,27 @@ async def couriers_edit(courier_id: int, request: Request) -> JSONResponse:
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content=e.args)
     
+@app.post('/orders')
+async def orders_create(request: Request) -> JSONResponse:
+    data = await request.json()
+
+    try:
+        orders = OrdersList.parse_obj(data)
+        # return orders
+
+    except ValidationError as errs:
+        errs = json.loads(errs.json())
+        msg = []
+        for e in errs:
+            index = e['loc'][1]
+            msg.append({'id': data['data'][index]['order_id']})
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'validation_error': {'orders':msg}})
+    
+    try:
+        successful = [{'id': order.order_id} for order in orders.list_orders]
+        queries = [order.dict() for order in orders.list_orders]
+        await database.execute_many(orders_model.insert(), values=queries)
+        return JSONResponse(status_code=status.HTTP_201_CREATED, content={'orders':successful})
+    except Exception as errs:
+        # есть гарантия, что order_id всегда уникальны
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=errs.args)
