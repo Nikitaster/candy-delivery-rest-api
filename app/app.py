@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 import databases
 
 from sqlalchemy import MetaData, create_engine, Table, Column, Integer, \
-    String, ForeignKey, Float, ARRAY, TIMESTAMP, Time, Interval
+    String, ForeignKey, Float, ARRAY, TIMESTAMP, Time, Interval, DateTime
 
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -61,8 +61,8 @@ orders_model = Table(
     Column('weight', Float, nullable=False),
     Column('region', Integer, nullable=False),
     Column('delivery_hours', ARRAY(String)),
-    Column('assign_time', TIMESTAMP, nullable=True),
-    Column('completed_at', TIMESTAMP, nullable=True),
+    Column('assign_time', DateTime, nullable=True),
+    Column('completed_at', DateTime, nullable=True),
 
     # courier = relationship('Couriers', back_populates='orders')
 )
@@ -110,6 +110,11 @@ class Order(BaseModel):
     delivery_hours: List[str]
     assign_time: datetime = None
     completed_at: datetime = None
+
+class OrderComplete(BaseModel):
+    order_id: int
+    courier_id: int
+    completed_at: datetime = Field(..., alias='complete_time')
 
 class OrdersList(BaseModel):
     list_orders: List[Order] = Field(..., alias='data')
@@ -272,31 +277,48 @@ async def order_assing(courier: CourierAssign) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     
-    # получим количество свободного места у курьера
+    # выяснить, есть ли у курьера действующие заказы
     query = """
-        select weight - sum as free_space from
-        (SELECT sum(o.weight), ct.weight FROM orders o
-            inner join couriers c on c.courier_id = :courier_id_value
-            inner join couriers_types ct on c.courier_type = ct.id
-            where o.courier_id = c.courier_id AND o.assign_time IS NOT NULL AND o.completed_at is NULL
-            group by ct.weight
-            ) SUMQUERY
+    select * from couriers c 
+    inner join orders o on o.courier_id = c.courier_id 
+    where c.courier_id = :courier_id_value;
     """
+
+    has_orders = await(database.fetch_val(query, values={'courier_id_value': courier.courier_id}))
+
+    if has_orders:
+        # получим количество свободного места у курьера
+        query = """
+            select weight - sum as free_space from
+            (SELECT sum(o.weight), ct.weight FROM orders o
+                inner join couriers c on c.courier_id = :courier_id_value
+                inner join couriers_types ct on c.courier_type = ct.id
+                where o.courier_id = c.courier_id AND o.assign_time IS NOT NULL AND o.completed_at is NULL
+                group by ct.weight
+                ) SUMQUERY
+        """
+    else:
+        # получим количество места у курьера
+        query = """
+            select ct.weight from couriers c 
+            inner join couriers_types ct on c.courier_type = ct.id 
+            where c.courier_id = :courier_id_value;
+        """
 
     free_space = await(database.fetch_val(query, values={'courier_id_value': courier.courier_id}))
 
-
     # макс. кол-во заказов: выбока по весу, району и графику работы. 
     # сортируем по весу, чтобы взять больше. completed_at, assign_time должны быть NULL
-    query = """
+    query = """ SELECT DISTINCT * from (
         SELECT o.order_id, o.weight FROM orders o
             inner join orders_intervals oi on oi.order_id = o.order_id
             inner join couriers_intervals ci on ci.courier_id = :courier_id_value
             inner join couriers c on c.courier_id = :courier_id_value
             where o.assign_time is NULL AND o.region = ANY(c.regions)
-            AND oi.time_from >= ci.time_from AND oi.time_to <= ci.time_to
+            AND oi.time_from <= ci.time_to AND oi.time_to >= ci.time_from
             AND o.weight <= :free_space
             order by o.weight ASC
+            ) subquery
     """
 
     orders = await(database.fetch_all(query, values={'courier_id_value': courier.courier_id, "free_space": free_space}))
@@ -307,12 +329,34 @@ async def order_assing(courier: CourierAssign) -> JSONResponse:
         for order in orders:
             if int(order['weight']) <= free_space:
                 assignments['orders'].append({'id': order['order_id']})
-                orders = await(database.execute(orders_model.update().where(orders_model.c.order_id == order['order_id']).values(courier_id=courier.courier_id, assign_time=assignments['assign_time'])))
+                await database.execute(orders_model.update().where(orders_model.c.order_id == order['order_id']).values(courier_id=courier.courier_id, assign_time=assignments['assign_time']))
                 free_space -= int(order['weight'])
             else:
                 break
-            
+
         return assignments
     return {}
+
+
+@app.post('/orders/complete', response_model=OrderComplete, response_model_include={'order_id'})
+async def order_complete(order: OrderComplete) -> JSONResponse:
+    # проверить, есть ли такой заказ 
+    query = """
+        SELECT * FROM orders o 
+            inner join couriers c on c.courier_id = o.courier_id
+            where o.order_id = :order_id
+                AND o.courier_id = :courier_id
+                AND o.completed_at is NULL
+    """
+
+    order_check = await database.fetch_one(query, values=order.dict(exclude={'completed_at'}, by_alias=True))
+    if not order_check:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'err': 'Not Found'})
+
+    await database.execute(orders_model.update().where(orders_model.c.order_id == order.order_id), 
+    values={ **order.dict(exclude={'completed_at'}), **{'completed_at': order.completed_at.replace(tzinfo=None)} })
+
+    return order
+
 
     
