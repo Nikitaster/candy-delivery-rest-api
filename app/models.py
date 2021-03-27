@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import List
+import re
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, validator
 
 
 class Courier(BaseModel):
@@ -11,6 +12,13 @@ class Courier(BaseModel):
     working_hours: List[str]
     rating: float = 0
     earnings: float = 0
+
+    @validator('working_hours')
+    def working_hours_match(cls, v):
+        for times in v:
+            if not re.match('\d{2}:\d{2}-\d{2}:\d{2}', times):
+                raise ValueError(times)
+        return v
 
 class CourierAssign(BaseModel):
     courier_id: int
@@ -26,6 +34,13 @@ class Order(BaseModel):
     delivery_hours: List[str]
     assign_time: datetime = None
     completed_at: datetime = None
+
+    @validator('delivery_hours')
+    def delivery_hours_match(cls, v):
+        for times in v:
+            if not re.match('\d{2}:\d{2}-\d{2}:\d{2}', times):
+                raise ValueError(times)
+        return v
 
 class OrderComplete(BaseModel):
     order_id: int

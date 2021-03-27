@@ -26,11 +26,21 @@ async def root():
     return {"message": "Hello World"}
 
 async def get_couriers_types_dict():
-    couriers_types_dict = dict()
+    couriers_types_dict = {}
     try:
         courier_types = await database.fetch_all(couriers_types_model.select())
         for t in courier_types:
             couriers_types_dict[t['name']] = t['id']
+    except Exception as e:
+        print(e.args)
+    return couriers_types_dict
+
+async def get_couriers_types_reverse_dict():
+    couriers_types_dict = {}
+    try:
+        courier_types = await database.fetch_all(couriers_types_model.select())
+        for t in courier_types:
+            couriers_types_dict[t['id']] = t['name']
     except Exception as e:
         print(e.args)
     return couriers_types_dict
@@ -118,16 +128,20 @@ async def courier_update(courier, update_dict):
         courier.working_hours = update_dict['working_hours']
         await reset_couriers_intervals(courier)
         await remove_orders_by_time(courier)
+    
+    new_values_dict = courier.dict()
+    new_values_dict['courier_type'] = int(new_values_dict['courier_type'])
+    
     if 'courier_type' in update_dict.keys():
         courier.courier_type = update_dict['courier_type']
+        couriers_types_dict = await get_couriers_types_dict()
+        new_values_dict['courier_type'] = int(couriers_types_dict[courier.courier_type])
         await remove_orders_by_weight(courier)
-
-    # сделать словарик, чтобы потом подставить значения ключа из таблицы couriers_types
-    couriers_types_dict = await get_couriers_types_dict()
-    # update db
-    update_dict = courier.dict()
-    update_dict['courier_type'] = couriers_types_dict[courier.courier_type]
-    await database.execute(couriers_model.update().where(couriers_model.c.courier_id == courier.courier_id), values=update_dict)
+    else:
+        couriers_types_dict = await get_couriers_types_reverse_dict()
+        courier.courier_type = str(couriers_types_dict[int(courier.courier_type)])
+    
+    await database.execute(couriers_model.update().where(couriers_model.c.courier_id == courier.courier_id), values=new_values_dict)
 
     return courier
 
@@ -158,6 +172,7 @@ async def orders_create(request: Request) -> JSONResponse:
 
     try:
         orders = OrdersList.parse_obj(data)
+        
         for order in orders.list_orders: 
             orders_intervals_queries += get_intervals_from_hours_line(order.delivery_hours, 'order_id', order.order_id)
 
@@ -168,12 +183,14 @@ async def orders_create(request: Request) -> JSONResponse:
             index = e['loc'][1]
             msg.append({'id': data['data'][index]['order_id']})
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'validation_error': {'orders':msg}})
-    
+    except Exception as errs:
+        print(errs.args)
+        return {}
     try:
         successful = [{'id': order.order_id} for order in orders.list_orders]
         queries = [order.dict() for order in orders.list_orders]
         await database.execute_many(orders_model.insert(), values=queries)
-        # сохраним в бд временные метки (если доабвление заказов вызовет исключение, не выполнится)
+        # сохраним в бд временные метки (если добавление заказов вызовет исключение, не выполнится)
         await database.execute_many(orders_intervals_model.insert(), values=orders_intervals_queries)
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={'orders':successful})
     except Exception as errs:
@@ -249,9 +266,11 @@ async def order_complete(order: OrderComplete) -> JSONResponse:
     # Время доставки одного заказа определяется как 
     # разница между временем окончания этого заказа и временем окончания предыдущего заказа 
     # (или временем назначения заказов, если вычисляется время для первого заказа).
+    
+    # all_orders = await database(orders_model.select().where(orders_model.c.courier_id == courier_id).order_by(orders_model.c.completed_at))
+    # for order in all_orders:
+        # print()
 
-    
-    
     # new_rating = (RATING_RATIO - min(t, RATING_RATIO))/(RATING_RATIO) * RATING_MAX
     # select avg((completed_at - assign_time)) from orders group by region order by avg asc;
 
