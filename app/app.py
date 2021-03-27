@@ -181,7 +181,8 @@ async def orders_create(request: Request) -> JSONResponse:
         msg = []
         for e in errs:
             index = e['loc'][1]
-            msg.append({'id': data['data'][index]['order_id']})
+            if {'id': data['data'][index]['order_id']} not in msg:
+                msg.append({'id': data['data'][index]['order_id']})
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'validation_error': {'orders':msg}})
     except Exception as errs:
         print(errs.args)
