@@ -9,3 +9,6 @@ DATABASE_URL = "postgresql://{}:{}@db:5432/{}".format(
     POSTGRES_PASSWORD,
     POSTGRES_DB,
 )
+
+RATING_RATIO = 3600
+RATING_MAX = 5

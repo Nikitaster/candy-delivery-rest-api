@@ -17,6 +17,19 @@ GET_FREE_SPACE_QUERY = """
         ) SUMQUERY
 """
 
+GET_FREE_SPACE_WITH_NEW_TYPE_QUERY = """ 
+    select weight - sum as free_space from
+        (SELECT sum(o.weight), ct.weight FROM orders o
+            inner join couriers c on c.courier_id = :courier_id_value
+            inner join couriers_types ct on :courier_type_value = ct.name                
+            where 
+                o.courier_id = c.courier_id 
+                AND o.assign_time IS NOT NULL 
+                AND o.completed_at is NULL
+            group by ct.weight
+        ) SUMQUERY
+"""
+
 GET_COURIER_MAX_WEIGHT_QUERY = """
     select ct.weight from couriers c 
     inner join couriers_types ct on c.courier_type = ct.id 
@@ -34,7 +47,7 @@ GET_SUITABLE_ORDERS_QUERY = """
             AND o.weight <= :free_space
             order by o.weight ASC
         ) subquery
-    """
+"""
 
 
 CHECK_ORDER_EXIST_QUERY = """
@@ -64,9 +77,3 @@ GET_UNSUITABLE_BY_TIME_ORDERS = """
             AND NOT (oi.time_from <= ci.time_to AND oi.time_to >= ci.time_from)
 """
 
-REMOVE_ORDERS_BY_ID = """
-    
-"""
-
-# UPDATE orders
-        # SET assign_time = NULL, courier_id = NULL 

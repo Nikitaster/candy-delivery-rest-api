@@ -1,14 +1,14 @@
-from typing import List, Dict
-from datetime import datetime
 import json
+from datetime import datetime
+from typing import Dict, List
 
-from fastapi import FastAPI, Response, status, Request
+from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from models import *
 from connect_db import *
+from models import *
 from queries import *
-
+from conf import RATING_RATIO, RATING_MAX
 
 app = FastAPI()
 
@@ -82,13 +82,58 @@ async def couriers_create(request: Request) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=errs.args)
     
 
-@app.patch("/couriers/{courier_id}", response_model=Courier, response_model_exclude={'rating', 'earnings'})
-async def couriers_edit(courier_id: int, request: Request) -> JSONResponse:
-    request_json = await request.json()
+async def reset_couriers_intervals(courier):
+    couriers_intervals = get_intervals_from_hours_line(courier.working_hours, 'courier_id', courier.courier_id)
+    # удалить старые интревалы  
+    await database.execute(couriers_intervals_model.delete().where(couriers_intervals_model.c.courier_id == courier.courier_id))
+    # сохранить новые
+    await database.execute_many(couriers_intervals_model.insert(), values=couriers_intervals)
+
+async def remove_orders_by_time(courier):
+    unsuitable_orders = await database.fetch_all(GET_UNSUITABLE_BY_TIME_ORDERS, values={'courier_id': courier.courier_id})
+    for order in unsuitable_orders:
+        await database.execute(orders_model.update().where(orders_model.c.order_id == order['order_id']), values={'assign_time': None, 'courier_id': None})
+    
+async def remove_orders_by_weight(courier):
+    # получить новый максимальный вес курьера
+    max_weight_raw = await database.fetch_one(couriers_types_model.select().where(couriers_types_model.c.name == courier.courier_type))
+    max_weight = max_weight_raw['weight']
+    free_space = max_weight
+    
+    # цель: сохранить больше заказов
+    # получить все заказы, отсортированные по возрастанию веса, отменить неподходящие
+    all_orders = await database.fetch_all(orders_model.select().where(orders_model.c.courier_id == courier.courier_id).order_by(orders_model.c.weight.asc()))
+    for order in all_orders:
+        print(max_weight, free_space, order['weight'])
+        if order['weight'] > free_space or order['weight'] > max_weight or free_space > max_weight:
+            print('DELETED')
+            await database.execute(orders_model.update().where(orders_model.c.order_id == order['order_id']), values={'assign_time': None, 'courier_id': None})
+        else:
+            free_space -= order['weight']
+
+async def courier_update(courier, update_dict):
+    if 'regions' in update_dict.keys():
+        courier.regions = update_dict['regions']
+    if 'working_hours' in update_dict.keys():
+        courier.working_hours = update_dict['working_hours']
+        await reset_couriers_intervals(courier)
+        await remove_orders_by_time(courier)
+    if 'courier_type' in update_dict.keys():
+        courier.courier_type = update_dict['courier_type']
+        await remove_orders_by_weight(courier)
 
     # сделать словарик, чтобы потом подставить значения ключа из таблицы couriers_types
     couriers_types_dict = await get_couriers_types_dict()
+    # update db
+    update_dict = courier.dict()
+    update_dict['courier_type'] = couriers_types_dict[courier.courier_type]
+    await database.execute(couriers_model.update().where(couriers_model.c.courier_id == courier.courier_id), values=update_dict)
 
+    return courier
+
+@app.patch("/couriers/{courier_id}", response_model=Courier, response_model_exclude={'rating', 'earnings'})
+async def couriers_edit(courier_id: int, request: Request) -> JSONResponse:
+    request_json = await request.json()
     try:
         query = couriers_model.select().where(couriers_model.c.courier_id == courier_id)
         courier_select = await database.fetch_one(query)
@@ -100,30 +145,7 @@ async def couriers_edit(courier_id: int, request: Request) -> JSONResponse:
                     errs.append(key)
             if errs:
                 return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'errs': errs})
-            
-            if 'regions' in request_json.keys():
-                courier.regions = request_json['regions']
-            if 'working_hours' in request_json.keys():
-                courier.working_hours = request_json['working_hours']
-                couriers_intervals = get_intervals_from_hours_line(courier.working_hours, 'courier_id', courier.courier_id)
-                # удалить старые интревалы
-                await database.execute(couriers_intervals_model.delete().where(couriers_intervals_model.c.courier_id == courier_id))
-                # сохранить новые
-                await database.execute_many(couriers_intervals_model.insert(), values=couriers_intervals)
-                # освободить неподходящие заказы
-                unsuitable_orders = await database.fetch_all(GET_UNSUITABLE_BY_TIME_ORDERS, values={'courier_id': courier_id})
-                for order in unsuitable_orders:
-                    await database.execute(orders_model.update().where(orders_model.c.order_id == order['order_id']), values={'assign_time': None, 'courier_id': None})
-            if 'courier_type' in request_json.keys():
-                courier.courier_type = request_json['courier_type']
-                # TODO: очистить неподходящие заказы по весу
-
-            # update db
-            update_dict = courier.dict()
-            update_dict['courier_type'] = couriers_types_dict[courier.courier_type]
-            await database.execute(couriers_model.update().where(couriers_model.c.courier_id == courier_id), values=update_dict)
-        
-            return courier
+            return await courier_update(courier, request_json)
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'errs': {"courier_id": courier_id, "msg": "Not exist"}})
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content=e.args)
@@ -170,18 +192,12 @@ async def order_assing(courier: CourierAssign) -> JSONResponse:
     except Exception:
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    
     # выяснить, есть ли у курьера действующие заказы
     has_orders = await database.fetch_val(HAS_ORDERS_QUERY, values={'courier_id_value': courier.courier_id})
 
-    if has_orders:
-        # получим количество свободного места у курьера
-        query = GET_FREE_SPACE_QUERY
-    else:
-        # получим количество места у курьера
-        query = GET_COURIER_MAX_WEIGHT_QUERY
-
-    free_space = await database.fetch_val(query, values={'courier_id_value': courier.courier_id})
+    # получим количество свободного места у курьера
+    free_space_query = GET_FREE_SPACE_QUERY if has_orders else GET_COURIER_MAX_WEIGHT_QUERY
+    free_space = await database.fetch_val(free_space_query, values={'courier_id_value': courier.courier_id})
 
     # макс. кол-во заказов: выбока по весу, району и графику работы. 
     # сортируем по весу, чтобы взять больше. completed_at, assign_time должны быть NULL
@@ -197,7 +213,10 @@ async def order_assing(courier: CourierAssign) -> JSONResponse:
         for order in orders:
             if int(order['weight']) <= free_space:
                 assignments['orders'].append({'id': order['order_id']})
-                await database.execute(orders_model.update().where(orders_model.c.order_id == order['order_id']).values(courier_id=courier.courier_id, assign_time=assignments['assign_time']))
+                await database.execute(orders_model.update().where(orders_model.c.order_id == order['order_id']).values(
+                    courier_id=courier.courier_id, 
+                    assign_time=assignments['assign_time']
+                ))
                 free_space -= int(order['weight'])
             else:
                 break
@@ -214,15 +233,26 @@ async def order_complete(order: OrderComplete) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'err': 'Not Found'})
 
     courier_id = order_check['courier_id']
-
     await database.execute(orders_model.update().where(orders_model.c.order_id == order.order_id), 
         values={ **order.dict(exclude={'completed_at'}), **{'completed_at': order.completed_at.replace(tzinfo=None)} })
 
-    # update earnings for current courier
+    # get current courier
     courier_raw = await database.fetch_one(GET_COURIER_PRICE_QUERY, values={'courier_id':courier_id})
+    
+    # update earnings for current courier
     await database.execute(couriers_model.update().where(couriers_model.c.courier_id == courier_id), values={'earnings':courier_raw['earnings'] + 500 * courier_raw['price']})
 
     # TODO: update rating for current courier
+    #  t = min(td[1], td[2], ..., td[n]) 
+    #  td[i]  - среднее время доставки заказов по району  i  (в секундах).
+
+    # Время доставки одного заказа определяется как 
+    # разница между временем окончания этого заказа и временем окончания предыдущего заказа 
+    # (или временем назначения заказов, если вычисляется время для первого заказа).
+
+    
+    
+    # new_rating = (RATING_RATIO - min(t, RATING_RATIO))/(RATING_RATIO) * RATING_MAX
     # select avg((completed_at - assign_time)) from orders group by region order by avg asc;
 
     return order
@@ -230,10 +260,10 @@ async def order_complete(order: OrderComplete) -> JSONResponse:
 @app.get('/couriers/{courier_id}', response_model=Courier, response_model_exclude_defaults=True)
 async def get_courier(courier_id: int) -> JSONResponse:
     courier = await database.fetch_one(couriers_model.select().where(couriers_model.c.courier_id == courier_id))
-    if courier:
-        courier = Courier.parse_obj(courier)
-        # из-за моей идеи хранить не наименование типа, а фк id, пришлось сделать лишний запрос
-        courier_type = await database.fetch_one(couriers_types_model.select().where(couriers_types_model.c.id == int(courier.courier_type)))
-        courier.courier_type = courier_type['name']
-        return courier
-    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'err': 'Not Found'})
+    if not courier:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'err': 'Not Found'})
+    courier = Courier.parse_obj(courier)
+    courier_type = await database.fetch_one(couriers_types_model.select().where(couriers_types_model.c.id == int(courier.courier_type)))
+    courier.courier_type = courier_type['name']
+    return courier
+    
