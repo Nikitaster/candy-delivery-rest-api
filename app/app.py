@@ -1,5 +1,3 @@
-import os
-
 from typing import List, Dict
 from datetime import datetime
 import json
@@ -7,117 +5,10 @@ import json
 from fastapi import FastAPI, Response, status, Request
 from fastapi.responses import JSONResponse
 
-import databases
+from models import *
+from connect_db import *
+from queries import *
 
-from sqlalchemy import MetaData, create_engine, Table, Column, Integer, \
-    String, ForeignKey, Float, ARRAY, TIMESTAMP, Time, Interval, DateTime
-
-from sqlalchemy.ext.declarative import declarative_base
-
-from pydantic import BaseModel, Field, ValidationError
-
-
-DATABASE_URL = "postgresql://{}:{}@db:5432/{}".format(
-    os.getenv('POSTGRES_USER'),
-    os.getenv('POSTGRES_PASSWORD'),
-    os.getenv('POSTGRES_DB'),
-)
-
-
-database = databases.Database(DATABASE_URL)
-
-metadata = MetaData()
-
-couriers_types_model = Table(
-    'couriers_types',
-    metadata,
-    Column('id', Integer, primary_key=True),
-    Column('name', String(16), nullable=False),
-    Column('weight', Float, nullable=False),
-)
-
-
-couriers_model = Table(
-    'couriers',
-    metadata,
-    Column('courier_id', Integer, primary_key=True),
-    Column('courier_type', Integer, ForeignKey('couriers_types.id'), nullable=False),
-    # Column('courier_type', String, nullable=False),
-    Column('regions', ARRAY(Integer)),
-    Column('working_hours', ARRAY(String)),
-    Column('rating', Float, nullable=True),
-    Column('earnings', Float, nullable=True),
-
-    # type = relationship('CouriersType')
-    # orders = relationship('Orders', back_populates='courier')
-)
-
-
-orders_model = Table(
-    'orders',
-    metadata,
-    Column('order_id', Integer, primary_key=True),
-    Column('courier_id', Integer, ForeignKey('couriers.courier_id'), nullable=True),
-    Column('weight', Float, nullable=False),
-    Column('region', Integer, nullable=False),
-    Column('delivery_hours', ARRAY(String)),
-    Column('assign_time', DateTime, nullable=True),
-    Column('completed_at', DateTime, nullable=True),
-
-    # courier = relationship('Couriers', back_populates='orders')
-)
-
-couriers_intervals_model = Table(
-    'couriers_intervals',
-    metadata,
-    Column('id', Integer, primary_key=True),
-    Column('courier_id', Integer, ForeignKey('couriers.courier_id')),
-    Column('time_from', Time),
-    Column('time_to', Time),
-)
-
-orders_intervals_model = Table(
-    'orders_intervals',
-    metadata,
-    Column('id', Integer, primary_key=True),
-    Column('order_id', Integer, ForeignKey('orders.order_id')),
-    Column('time_from', Time),
-    Column('time_to', Time),
-)
-
-engine = create_engine(DATABASE_URL)
-metadata.create_all(engine)
-
-class Courier(BaseModel):
-    courier_id: int
-    courier_type: str
-    regions: List[int]
-    working_hours: List[str]
-    rating: float = None
-    earnings: float = None
-
-class CourierAssign(BaseModel):
-    courier_id: int
-
-class CouriersList(BaseModel):
-    list_couriers: List[Courier] = Field(..., alias='data')
-
-class Order(BaseModel):
-    order_id: int
-    courier_id: int = None
-    weight: float = Field(..., ge=0.01, le=50)
-    region: int
-    delivery_hours: List[str]
-    assign_time: datetime = None
-    completed_at: datetime = None
-
-class OrderComplete(BaseModel):
-    order_id: int
-    courier_id: int
-    completed_at: datetime = Field(..., alias='complete_time')
-
-class OrdersList(BaseModel):
-    list_orders: List[Order] = Field(..., alias='data')
 
 app = FastAPI()
 
@@ -219,15 +110,18 @@ async def couriers_edit(courier_id: int, request: Request) -> JSONResponse:
                 await database.execute(couriers_intervals_model.delete().where(couriers_intervals_model.c.courier_id == courier_id))
                 # сохранить новые
                 await database.execute_many(couriers_intervals_model.insert(), values=couriers_intervals)
+                # освободить неподходящие заказы
+                unsuitable_orders = await database.fetch_all(GET_UNSUITABLE_BY_TIME_ORDERS, values={'courier_id': courier_id})
+                for order in unsuitable_orders:
+                    await database.execute(orders_model.update().where(orders_model.c.order_id == order['order_id']), values={'assign_time': None, 'courier_id': None})
             if 'courier_type' in request_json.keys():
                 courier.courier_type = request_json['courier_type']
+                # TODO: очистить неподходящие заказы по весу
 
             # update db
             update_dict = courier.dict()
             update_dict['courier_type'] = couriers_types_dict[courier.courier_type]
             await database.execute(couriers_model.update().where(couriers_model.c.courier_id == courier_id), values=update_dict)
-            
-            # TODO: обновить заказы
         
             return courier
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'errs': {"courier_id": courier_id, "msg": "Not exist"}})
@@ -278,50 +172,24 @@ async def order_assing(courier: CourierAssign) -> JSONResponse:
 
     
     # выяснить, есть ли у курьера действующие заказы
-    query = """
-    select * from couriers c 
-    inner join orders o on o.courier_id = c.courier_id 
-    where c.courier_id = :courier_id_value;
-    """
-
-    has_orders = await(database.fetch_val(query, values={'courier_id_value': courier.courier_id}))
+    has_orders = await database.fetch_val(HAS_ORDERS_QUERY, values={'courier_id_value': courier.courier_id})
 
     if has_orders:
         # получим количество свободного места у курьера
-        query = """
-            select weight - sum as free_space from
-            (SELECT sum(o.weight), ct.weight FROM orders o
-                inner join couriers c on c.courier_id = :courier_id_value
-                inner join couriers_types ct on c.courier_type = ct.id
-                where o.courier_id = c.courier_id AND o.assign_time IS NOT NULL AND o.completed_at is NULL
-                group by ct.weight
-                ) SUMQUERY
-        """
+        query = GET_FREE_SPACE_QUERY
     else:
         # получим количество места у курьера
-        query = """
-            select ct.weight from couriers c 
-            inner join couriers_types ct on c.courier_type = ct.id 
-            where c.courier_id = :courier_id_value;
-        """
+        query = GET_COURIER_MAX_WEIGHT_QUERY
 
-    free_space = await(database.fetch_val(query, values={'courier_id_value': courier.courier_id}))
+    free_space = await database.fetch_val(query, values={'courier_id_value': courier.courier_id})
 
     # макс. кол-во заказов: выбока по весу, району и графику работы. 
     # сортируем по весу, чтобы взять больше. completed_at, assign_time должны быть NULL
-    query = """ SELECT DISTINCT * from (
-        SELECT o.order_id, o.weight FROM orders o
-            inner join orders_intervals oi on oi.order_id = o.order_id
-            inner join couriers_intervals ci on ci.courier_id = :courier_id_value
-            inner join couriers c on c.courier_id = :courier_id_value
-            where o.assign_time is NULL AND o.region = ANY(c.regions)
-            AND oi.time_from <= ci.time_to AND oi.time_to >= ci.time_from
-            AND o.weight <= :free_space
-            order by o.weight ASC
-            ) subquery
-    """
-
-    orders = await(database.fetch_all(query, values={'courier_id_value': courier.courier_id, "free_space": free_space}))
+    orders = await database.fetch_all(GET_SUITABLE_ORDERS_QUERY, 
+        values={
+            'courier_id_value': courier.courier_id, 
+            "free_space": free_space
+        })
 
     if orders:
         assignments = {"orders": [], 'assign_time': datetime.now()}
@@ -341,22 +209,31 @@ async def order_assing(courier: CourierAssign) -> JSONResponse:
 @app.post('/orders/complete', response_model=OrderComplete, response_model_include={'order_id'})
 async def order_complete(order: OrderComplete) -> JSONResponse:
     # проверить, есть ли такой заказ 
-    query = """
-        SELECT * FROM orders o 
-            inner join couriers c on c.courier_id = o.courier_id
-            where o.order_id = :order_id
-                AND o.courier_id = :courier_id
-                AND o.completed_at is NULL
-    """
-
-    order_check = await database.fetch_one(query, values=order.dict(exclude={'completed_at'}, by_alias=True))
+    order_check = await database.fetch_one(CHECK_ORDER_EXIST_QUERY, values=order.dict(exclude={'completed_at'}, by_alias=True))
     if not order_check:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'err': 'Not Found'})
 
+    courier_id = order_check['courier_id']
+
     await database.execute(orders_model.update().where(orders_model.c.order_id == order.order_id), 
-    values={ **order.dict(exclude={'completed_at'}), **{'completed_at': order.completed_at.replace(tzinfo=None)} })
+        values={ **order.dict(exclude={'completed_at'}), **{'completed_at': order.completed_at.replace(tzinfo=None)} })
+
+    # update earnings for current courier
+    courier_raw = await database.fetch_one(GET_COURIER_PRICE_QUERY, values={'courier_id':courier_id})
+    await database.execute(couriers_model.update().where(couriers_model.c.courier_id == courier_id), values={'earnings':courier_raw['earnings'] + 500 * courier_raw['price']})
+
+    # TODO: update rating for current courier
+    # select avg((completed_at - assign_time)) from orders group by region order by avg asc;
 
     return order
-
-
     
+@app.get('/couriers/{courier_id}', response_model=Courier, response_model_exclude_defaults=True)
+async def get_courier(courier_id: int) -> JSONResponse:
+    courier = await database.fetch_one(couriers_model.select().where(couriers_model.c.courier_id == courier_id))
+    if courier:
+        courier = Courier.parse_obj(courier)
+        # из-за моей идеи хранить не наименование типа, а фк id, пришлось сделать лишний запрос
+        courier_type = await database.fetch_one(couriers_types_model.select().where(couriers_types_model.c.id == int(courier.courier_type)))
+        courier.courier_type = courier_type['name']
+        return courier
+    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={'err': 'Not Found'})

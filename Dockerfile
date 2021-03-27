@@ -9,7 +9,7 @@ ENV PYTHONUNBUFFERED 1
 
 WORKDIR /root/app
 
-RUN apt update && apt upgrade && apt install -y curl
+RUN apt update && apt install -y curl
 
 # install dependencies
 RUN pip install --upgrade pip

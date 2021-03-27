@@ -1,0 +1,36 @@
+image: python:3.8
+
+before_script:
+  - python -V
+  - pip install --upgrade pip
+
+stages:
+  - style
+  - deploy
+
+pylint:
+  stage: style
+  before_script:
+    - pip install -r requirements.txt
+    - pip install pylint==2.6.0
+    - pip install pylint-json2html==0.2.0
+    - pip install anybadge==1.7.0
+  script:
+    ./pylint_runner.sh
+  artifacts:
+    paths:
+      - public/pylint.svg
+      - public/pylint.html
+  only:
+    - master
+
+
+pages:
+  stage: deploy
+  script:
+  - echo 'Publish pages data'
+  artifacts:
+    paths:
+    - public
+  only:
+  - master
