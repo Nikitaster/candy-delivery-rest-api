@@ -1,27 +1,16 @@
-HAS_ORDERS_QUERY = """ 
+"""Module contains sql queries."""
+
+HAS_ORDERS_QUERY = """
     select * from couriers c 
     inner join orders o on o.courier_id = c.courier_id 
     where c.courier_id = :courier_id_value;
 """
 
-GET_FREE_SPACE_QUERY = """ 
+GET_FREE_SPACE_QUERY = """
     select weight - sum as free_space from
         (SELECT sum(o.weight), ct.weight FROM orders o
             inner join couriers c on c.courier_id = :courier_id_value
             inner join couriers_types ct on c.courier_type = ct.id                
-            where 
-                o.courier_id = c.courier_id 
-                AND o.assign_time IS NOT NULL 
-                AND o.completed_at is NULL
-            group by ct.weight
-        ) SUMQUERY
-"""
-
-GET_FREE_SPACE_WITH_NEW_TYPE_QUERY = """ 
-    select weight - sum as free_space from
-        (SELECT sum(o.weight), ct.weight FROM orders o
-            inner join couriers c on c.courier_id = :courier_id_value
-            inner join couriers_types ct on :courier_type_value = ct.name                
             where 
                 o.courier_id = c.courier_id 
                 AND o.assign_time IS NOT NULL 
@@ -36,7 +25,7 @@ GET_COURIER_MAX_WEIGHT_QUERY = """
     where c.courier_id = :courier_id_value;
 """
 
-GET_SUITABLE_ORDERS_QUERY = """ 
+GET_SUITABLE_ORDERS_QUERY = """
     SELECT DISTINCT * from (
         SELECT o.order_id, o.weight FROM orders o
             inner join orders_intervals oi on oi.order_id = o.order_id

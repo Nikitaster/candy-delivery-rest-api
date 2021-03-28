@@ -1,9 +1,9 @@
+"""Module contains connects to database, tables models."""
+
 import databases
 
 from sqlalchemy import MetaData, create_engine, Table, Column, Integer, \
-    String, ForeignKey, Float, ARRAY, TIMESTAMP, Time, Interval, DateTime
-
-from sqlalchemy.ext.declarative import declarative_base
+    String, ForeignKey, Float, ARRAY, Time, DateTime
 
 from conf import DATABASE_URL
 
