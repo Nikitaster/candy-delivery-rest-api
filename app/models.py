@@ -15,7 +15,7 @@ class Courier(BaseModel):
     courier_type: str
     regions: List[int]
     working_hours: List[str]
-    rating: float = 0
+    rating: float = None
     earnings: int = 0
 
     @validator('working_hours')
