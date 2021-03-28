@@ -5,8 +5,34 @@ before_script:
   - pip install --upgrade pip
 
 stages:
+  - test
   - style
   - deploy
+
+test:
+  stage: test
+  services:
+    - name: postgres:13.0
+      alias: db
+  variables:
+    POSTGRES_USER: 'postgres'
+    POSTGRES_PASSWORD: 'postgres'
+    POSTGRES_DB: 'test'
+    DEBUG: "True"
+    TEST_MODE: "True"
+  before_script:
+    - pip install -r requirements.txt
+  script:
+    - coverage run -m pytest --disable-warnings
+    - coverage report --omit=app/test_app.py -m
+    - coverage html --omit=app/test_app.py
+    - mkdir public
+    - mv htmlcov public/coverage
+  artifacts:
+    paths:
+      - public/coverage
+  only:
+    - master
 
 pylint:
   stage: style
