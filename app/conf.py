@@ -14,3 +14,5 @@ DATABASE_URL = 'postgresql://{}:{}@db:5432/{}'.format(
 
 RATING_RATIO = 3600
 RATING_MAX = 5
+
+regular_expression_for_matching_time = """^([0-1]?[0-9]|2[0-3]):[0-5][0-9]-([0-1]?[0-9]|2[0-3]):[0-5][0-9]$"""

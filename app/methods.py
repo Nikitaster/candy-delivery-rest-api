@@ -1,8 +1,8 @@
 """Module contains methods."""
-
+import re
 from typing import List
 from datetime import datetime
-from conf import RATING_RATIO, RATING_MAX
+from conf import RATING_RATIO, RATING_MAX, regular_expression_for_matching_time
 from connect_db import database, couriers_intervals_model, \
     orders_model, couriers_model, couriers_types_model
 from queries import GET_UNSUITABLE_BY_TIME_ORDERS_QUERY
@@ -90,6 +90,10 @@ async def courier_update(courier, update_dict):
     if 'regions' in update_dict.keys():
         courier.regions = update_dict['regions']
     if 'working_hours' in update_dict.keys():
+        for times in update_dict['working_hours']:
+            if not re.match(regular_expression_for_matching_time, times):
+                raise ValueError({'courier_id': courier.courier_id,
+                                  'working_hours': times})
         courier.working_hours = update_dict['working_hours']
         await reset_couriers_intervals(courier)
         await remove_orders_by_time(courier)

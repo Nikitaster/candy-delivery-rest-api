@@ -97,6 +97,9 @@ async def couriers_edit(courier_id: int, request: Request) -> JSONResponse:
             return await courier_update(courier, request_json)
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,
                             content={'errs': {'courier_id': courier_id, 'msg': 'Not exist'}})
+    except ValueError as errs:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,
+                            content={'validation_error': errs.args})
     except Exception as err:
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content=err.args)
 

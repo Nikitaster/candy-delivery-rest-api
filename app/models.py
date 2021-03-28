@@ -2,9 +2,12 @@
 
 from datetime import datetime
 from typing import List
+
 import re
 
 from pydantic import BaseModel, Field, validator
+
+from conf import regular_expression_for_matching_time
 
 
 class Courier(BaseModel):
@@ -18,7 +21,7 @@ class Courier(BaseModel):
     @validator('working_hours')
     def working_hours_match(cls, v):
         for times in v:
-            if not re.match('^\d{2}:\d{2}-\d{2}:\d{2}$', times):
+            if not re.match(regular_expression_for_matching_time, times):
                 raise ValueError(times)
         return v
 
@@ -43,7 +46,7 @@ class Order(BaseModel):
     @validator('delivery_hours')
     def delivery_hours_match(cls, v):
         for times in v:
-            if not re.match('^\d{2}:\d{2}-\d{2}:\d{2}$', times):
+            if not re.match(regular_expression_for_matching_time, times):
                 raise ValueError(times)
         return v
 
