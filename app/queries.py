@@ -3,7 +3,8 @@
 HAS_ORDERS_QUERY = """
     select * from couriers c 
     inner join orders o on o.courier_id = c.courier_id 
-    where c.courier_id = :courier_id_value;
+    where c.courier_id = :courier_id_value
+        AND o.completed_at is NULL;
 """
 
 GET_FREE_SPACE_QUERY = """
@@ -75,3 +76,5 @@ GET_COMPLETED_ORDERS_FOR_COURIER_QUERY = """
     group by o.region, o.assign_time, o.completed_at
     order by o.region ASC, o.completed_at DESC
 """
+
+# group by o.region, o.assign_time, o.completed_at

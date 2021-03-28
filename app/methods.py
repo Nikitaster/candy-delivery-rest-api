@@ -116,31 +116,38 @@ async def courier_update(courier, update_dict):
 def parse_orders_to_times_by_regions(all_orders):
     times = {}
     for i in range(len(all_orders)):
-        if not all_orders[i]['region'] in times.keys():
-            times[all_orders[i]['region']] = {'assign_times': [], 'complete_times': []}
-        times[all_orders[i]['region']]['assign_times'].append(
-            all_orders[i]['assign_time'].timestamp())
-        times[all_orders[i]['region']]['complete_times'].append(
-            all_orders[i]['completed_at'].timestamp())
+        region = all_orders[i]['region']
+        assign_time = all_orders[i]['assign_time'].timestamp()
+        completed_at = all_orders[i]['completed_at'].timestamp()
+        if not region in times.keys():
+            times[region] = {}
+        if not assign_time in times[region]:
+            times[region] = {**times[region], **{assign_time: []}}
+        times[region][assign_time].append(completed_at)
     return times
 
 
 def calculate_new_rating_for_courier(times):
-    avg_times = {x: [] for x in times.keys()}
-    # СЧИТАЕМ AVG
+    delivery_times = {x: [] for x in times.keys()}
+    avg_times = []
+    # СЧИТАЕМ Времена на доставку в каждом районе
     for region in times:
-        length_of_times = len(times[region]['complete_times'])
-        if length_of_times == 1:
-            avg_times[region] = times[region]['complete_times'][0] - \
-                                times[region]['assign_times'][0]
-        elif length_of_times > 1:
-            delivery_times_sum = 0
-            count_times = 0
-            for i in range(1, length_of_times):
-                delivery_times_sum += (times[region]['complete_times'][i - 1]
-                                       - times[region]['complete_times'][i])
-                count_times += 1
-            avg_times[region] = delivery_times_sum / count_times
+        for assign_time in times[region]:
+            length_of_completed = len(times[region][assign_time])
+            if length_of_completed == 1:
+                delivery_times[region].append(times[region][assign_time][0] - assign_time)
+            elif length_of_completed > 1:
+                for i in range(1, len(times[region][assign_time])):
+                    delivery_times[region].append(times[region][assign_time][i-1] -
+                                                  times[region][assign_time][i])
+    # СЧИТАЕМ AVG
+    for region in delivery_times:
+        delivery_times_sum = 0
+        delivery_times_count = 0
+        for delivery_time in delivery_times[region]:
+            delivery_times_sum += delivery_time
+            delivery_times_count += 1
+        avg_times.append(delivery_times_sum / delivery_times_count)
 
-    return round((RATING_RATIO - min(min(avg_times.values()), RATING_RATIO)) /
+    return round((RATING_RATIO - min(min(avg_times), RATING_RATIO)) /
                  RATING_RATIO * RATING_MAX, 2)
