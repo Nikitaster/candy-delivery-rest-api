@@ -24,6 +24,7 @@ test:
     - export POSTGRES_USER=$POSTGRES_USER
     - export PGPASSWORD=$POSTGRES_PASSWORD
     - export POSTGRES_DB=$POSTGRES_DB
+    - apt-get update
     - apt-get install -y postgresql postgresql-client libpq-dev
     - psql postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@db:5432/$POSTGRES_DB -f ./init.sql
     - pip install -r requirements.txt
