@@ -204,12 +204,12 @@ courier_get_test_json = {
 orders_complete_test_json = {
     'requests': [
         {
-            "courier_id": 2,
-            "order_id": 1,
+            "courier_id": 1,
+            "order_id": 444,
             "complete_time": str(datetime.now().timestamp())
         },
         {
-            "courier_id": 2,
+            "courier_id": 1,
             "order_id": 0,
             "complete_time": str(datetime.now().timestamp())
         }
@@ -217,7 +217,7 @@ orders_complete_test_json = {
     'responses': [
         {
             'status_code': 200,
-            'json': {"order_id": 1}
+            'json': {"order_id": 444}
         },
         {
             'status_code': 400,
@@ -229,7 +229,7 @@ orders_complete_test_json = {
 
 orders_assign_test_json = {
     'requests': [
-        {"courier_id": 2}, {"courier_id": 0},
+        {"courier_id": 1}, {"courier_id": 0}, {"courier_id": 2},
     ],
     'responses': [
         {
@@ -237,6 +237,9 @@ orders_assign_test_json = {
         },
         {
             'status_code': 400
-        }
+        },
+        {
+            'status_code': 200
+        },
     ]
 }
