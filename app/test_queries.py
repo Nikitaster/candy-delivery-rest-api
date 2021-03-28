@@ -1,3 +1,5 @@
+from datetime import datetime
+
 couriers_create_test_json = {
     'requests': [
         {
@@ -132,6 +134,109 @@ couriers_patch_test_json = {
                         "test"
                     ]
                 }
+        }
+    ]
+}
+
+
+orders_create_test_json = {
+    'requests': [
+        {
+            "data": [
+                {
+                    "order_id": 444,
+                    "weight": 0.23,
+                    "region": 1,
+                    "delivery_hours": ["09:00-18:00"]
+                },
+                {
+                    "order_id": 555,
+                    "weight": 15,
+                    "region": 1,
+                    "delivery_hours": ["09:00-18:00"]
+                },
+                {
+                    "order_id": 666,
+                    "weight": 0.01,
+                    "region": 1,
+                    "delivery_hours": ["09:00-12:00", "16:00-21:30"]
+                }
+            ]
+        },
+        {
+            "data": [
+                {
+                    "order_id": 444,
+                    "weight": 0.23,
+                    "region": 1,
+                    "delivery_hours": ["09:00-18:00test"]
+                },
+                {
+                    "order_id": 555,
+                    "weight": 0.23
+                }
+            ]
+        }
+    ],
+    'responses': [
+        {
+            'status_code': 201,
+            'json': {"orders": [{"id": 444}, {"id": 555}, {"id": 666}]}
+        },
+        {
+            'status_code': 400,
+            'json': {"validation_error": {"orders": [{"id": 444}, {"id": 555}]}}
+        }
+    ]
+}
+
+
+courier_get_test_json = {
+    'requests': [
+
+    ],
+    'responses': [
+
+    ]
+}
+
+
+orders_complete_test_json = {
+    'requests': [
+        {
+            "courier_id": 2,
+            "order_id": 1,
+            "complete_time": str(datetime.now().timestamp())
+        },
+        {
+            "courier_id": 2,
+            "order_id": 0,
+            "complete_time": str(datetime.now().timestamp())
+        }
+    ],
+    'responses': [
+        {
+            'status_code': 200,
+            'json': {"order_id": 1}
+        },
+        {
+            'status_code': 400,
+            'json': {"err": "Not Found"}
+        }
+    ]
+}
+
+
+orders_assign_test_json = {
+    'requests': [
+        {"courier_id": 2}, {"courier_id": 0},
+    ],
+    'responses': [
+        {
+            'status_code': 200
+        },
+        {
+            'status_code': 400
         }
     ]
 }
