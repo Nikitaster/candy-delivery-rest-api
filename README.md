@@ -5,6 +5,7 @@
 # Candy Delivery REST API
 * [About](#about)
 * [Dependencies](#dependencies)
+* [Database diagram](#db)
 * [Installation](#installation)
 * [Run](#run)
 * [Run Tests](#run_tests)
@@ -22,6 +23,9 @@
 * <a href="https://coverage.readthedocs.io">Coverage</a> – code coverage 
 * <a href="https://www.python-httpx.org">HTTPX</a> – http client for async requests
 * <a href="https://requests.readthedocs.io">Requests</a> – http library for sync requests
+
+## Database diagram<a name="db"></a>
+<img src="https://i.ibb.co/nf4BhMP/candy-delivery-uml-db.jpg" width=50%>
 
 
 ## Installation<a name="installation"></a>
