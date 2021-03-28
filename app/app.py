@@ -218,8 +218,8 @@ async def order_complete(order: OrderComplete) -> JSONResponse:
     all_orders = await database.fetch_all(GET_COMPLETED_ORDERS_FOR_COURIER_QUERY,
                                           values={'courier_id': order.courier_id})
 
-    times = parse_orders_to_times_by_regions(all_orders)
-    new_rating = calculate_new_rating_for_courier(times)
+    times = await parse_orders_to_times_by_regions(all_orders)
+    new_rating = await calculate_new_rating_for_courier(times)
 
     await database.execute(couriers_model.update().where(
         couriers_model.c.courier_id == order.courier_id), values={'rating': new_rating})

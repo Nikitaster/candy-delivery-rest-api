@@ -16,7 +16,7 @@ class Courier(BaseModel):
     regions: List[int]
     working_hours: List[str]
     rating: float = 0
-    earnings: float = 0
+    earnings: int = 0
 
     @validator('working_hours')
     def working_hours_match(cls, v):

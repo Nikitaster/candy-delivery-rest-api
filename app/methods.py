@@ -117,7 +117,7 @@ async def courier_update(courier, update_dict):
     return courier
 
 
-def parse_orders_to_times_by_regions(all_orders):
+async def parse_orders_to_times_by_regions(all_orders):
     times = {}
     for i in range(len(all_orders)):
         region = all_orders[i]['region']
@@ -131,7 +131,7 @@ def parse_orders_to_times_by_regions(all_orders):
     return times
 
 
-def calculate_new_rating_for_courier(times):
+async def calculate_new_rating_for_courier(times):
     delivery_times = {x: [] for x in times.keys()}
     avg_times = []
     # СЧИТАЕМ Времена на доставку в каждом районе
@@ -142,8 +142,8 @@ def calculate_new_rating_for_courier(times):
                 delivery_times[region].append(times[region][assign_time][0] - assign_time)
             elif length_of_completed > 1:
                 for i in range(1, len(times[region][assign_time])):
-                    delivery_times[region].append(times[region][assign_time][i - 1] -
-                                                  times[region][assign_time][i])
+                    delivery_times[region].append(times[region][assign_time][i - 1] - times[region][assign_time][i])
+                delivery_times[region].append(times[region][assign_time][0] - assign_time)
     # СЧИТАЕМ AVG
     for region in delivery_times:
         delivery_times_sum = 0
@@ -153,5 +153,5 @@ def calculate_new_rating_for_courier(times):
             delivery_times_count += 1
         avg_times.append(delivery_times_sum / delivery_times_count)
 
-    return round((RATING_RATIO - min(min(avg_times), RATING_RATIO)) /
-                 RATING_RATIO * RATING_MAX, 2)
+    return round(
+        ((RATING_RATIO - min(min(avg_times), RATING_RATIO)) / RATING_RATIO * RATING_MAX), 2)
