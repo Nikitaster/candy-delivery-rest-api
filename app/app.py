@@ -33,16 +33,15 @@ async def shutdown():
 
 @app.post('/couriers')
 async def couriers_create(request: Request) -> JSONResponse:
-    data = await request.json()
-
-    # сделать словарик, чтобы потом подставить значения ключа из таблицы couriers_types
-    couriers_types_dict = await get_couriers_types_dict()
-
     query_values = []
     couriers_intervals = []
     successful = []
 
     try:
+        data = await request.json()
+        # сделать словарик, чтобы потом подставить значения ключа из таблицы couriers_types
+        couriers_types_dict = await get_couriers_types_dict()
+
         couriers = CouriersList.parse_obj(data)
         for courier in couriers.list_couriers:
             courier.courier_type = couriers_types_dict[str(courier.courier_type)]

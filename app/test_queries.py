@@ -1,3 +1,5 @@
+"""JSON requests and responses for tests."""
+
 from datetime import datetime
 
 couriers_create_test_json = {
@@ -94,7 +96,14 @@ couriers_patch_test_json = {
         },
         {
             "test": "test"
-        }
+        },
+        {
+            "regions": [11, 33, 2, 1],
+            "courier_type": "foot",
+            "working_hours": [
+                "13:00-14:00"
+            ]
+        },
     ],
     'responses': [
         {
@@ -134,7 +143,24 @@ couriers_patch_test_json = {
                         "test"
                     ]
                 }
-        }
+        },
+        {
+            'status_code': 200,
+            'json':
+                {
+                    "courier_id": 1,
+                    "courier_type": "foot",
+                    "regions": [
+                        11,
+                        33,
+                        2,
+                        1
+                    ],
+                    "working_hours": [
+                        "13:00-14:00"
+                    ]
+                }
+        },
     ]
 }
 
@@ -176,7 +202,17 @@ orders_create_test_json = {
                     "weight": 0.23
                 }
             ]
-        }
+        },
+        {
+            "data": [
+                {
+                    "order_id": 777,
+                    "weight": 0.23,
+                    "region": 22,
+                    "delivery_hours": ["09:00-18:00"]
+                }
+            ]
+        },
     ],
     'responses': [
         {
@@ -186,7 +222,11 @@ orders_create_test_json = {
         {
             'status_code': 400,
             'json': {"validation_error": {"orders": [{"id": 444}, {"id": 555}]}}
-        }
+        },
+        {
+            'status_code': 201,
+            'json': {"orders": [{"id": 777}]}
+        },
     ]
 }
 
@@ -212,7 +252,7 @@ orders_complete_test_json = {
             "courier_id": 1,
             "order_id": 0,
             "complete_time": str(datetime.now().timestamp())
-        }
+        },
     ],
     'responses': [
         {

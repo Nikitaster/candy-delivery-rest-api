@@ -76,5 +76,3 @@ GET_COMPLETED_ORDERS_FOR_COURIER_QUERY = """
     group by o.region, o.assign_time, o.completed_at
     order by o.region ASC, o.completed_at DESC
 """
-
-# group by o.region, o.assign_time, o.completed_at

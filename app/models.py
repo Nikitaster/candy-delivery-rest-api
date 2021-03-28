@@ -19,11 +19,11 @@ class Courier(BaseModel):
     earnings: int = 0
 
     @validator('working_hours')
-    def working_hours_match(cls, v):
-        for times in v:
+    def working_hours_match(cls, value):
+        for times in value:
             if not re.match(regular_expression_for_matching_time, times):
                 raise ValueError(times)
-        return v
+        return value
 
 
 class CourierAssign(BaseModel):
@@ -44,11 +44,11 @@ class Order(BaseModel):
     completed_at: datetime = None
 
     @validator('delivery_hours')
-    def delivery_hours_match(cls, v):
-        for times in v:
+    def delivery_hours_match(cls, value):
+        for times in value:
             if not re.match(regular_expression_for_matching_time, times):
                 raise ValueError(times)
-        return v
+        return value
 
 
 class OrderComplete(BaseModel):
