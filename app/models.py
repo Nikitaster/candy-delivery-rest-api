@@ -18,7 +18,7 @@ class Courier(BaseModel):
     @validator('working_hours')
     def working_hours_match(cls, v):
         for times in v:
-            if not re.match('\d{2}:\d{2}-\d{2}:\d{2}', times):
+            if not re.match('^\d{2}:\d{2}-\d{2}:\d{2}$', times):
                 raise ValueError(times)
         return v
 
@@ -43,7 +43,7 @@ class Order(BaseModel):
     @validator('delivery_hours')
     def delivery_hours_match(cls, v):
         for times in v:
-            if not re.match('\d{2}:\d{2}-\d{2}:\d{2}', times):
+            if not re.match('^\d{2}:\d{2}-\d{2}:\d{2}$', times):
                 raise ValueError(times)
         return v
 

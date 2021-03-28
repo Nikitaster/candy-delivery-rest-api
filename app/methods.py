@@ -119,9 +119,9 @@ def parse_orders_to_times_by_regions(all_orders):
         region = all_orders[i]['region']
         assign_time = all_orders[i]['assign_time'].timestamp()
         completed_at = all_orders[i]['completed_at'].timestamp()
-        if not region in times.keys():
+        if region not in times.keys():
             times[region] = {}
-        if not assign_time in times[region]:
+        if assign_time not in times[region]:
             times[region] = {**times[region], **{assign_time: []}}
         times[region][assign_time].append(completed_at)
     return times
@@ -138,7 +138,7 @@ def calculate_new_rating_for_courier(times):
                 delivery_times[region].append(times[region][assign_time][0] - assign_time)
             elif length_of_completed > 1:
                 for i in range(1, len(times[region][assign_time])):
-                    delivery_times[region].append(times[region][assign_time][i-1] -
+                    delivery_times[region].append(times[region][assign_time][i - 1] -
                                                   times[region][assign_time][i])
     # СЧИТАЕМ AVG
     for region in delivery_times:
