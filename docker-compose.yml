@@ -16,6 +16,8 @@ services:
     command: ./docker-entrypoint.sh
     env_file:
       - .env
+    volumes: 
+      - ./:/root/app 
     ports:
       - 8080:8080
     depends_on:
