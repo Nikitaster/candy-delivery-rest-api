@@ -31,11 +31,6 @@ async def shutdown():
     await database.disconnect()
 
 
-@app.get('/')
-async def root():
-    return {'message': 'Hello World'}
-
-
 @app.post('/couriers')
 async def couriers_create(request: Request) -> JSONResponse:
     data = await request.json()
@@ -82,8 +77,8 @@ async def couriers_create(request: Request) -> JSONResponse:
 @app.patch('/couriers/{courier_id}', response_model=Courier,
            response_model_exclude={'rating', 'earnings'})
 async def couriers_edit(courier_id: int, request: Request) -> JSONResponse:
-    request_json = await request.json()
     try:
+        request_json = await request.json()
         query = couriers_model.select().where(couriers_model.c.courier_id == courier_id)
         courier_select = await database.fetch_one(query)
         if courier_select:
@@ -100,8 +95,6 @@ async def couriers_edit(courier_id: int, request: Request) -> JSONResponse:
     except ValueError as errs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,
                             content={'validation_error': errs.args})
-    except Exception as err:
-        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content=err.args)
 
 
 @app.post('/orders')

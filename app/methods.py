@@ -76,9 +76,7 @@ async def remove_orders_by_weight(courier):
     all_orders = await database.fetch_all(orders_model.select().where(
         orders_model.c.courier_id == courier.courier_id).order_by(orders_model.c.weight.asc()))
     for order in all_orders:
-        print(max_weight, free_space, order['weight'])
         if order['weight'] > free_space or order['weight'] > max_weight or free_space > max_weight:
-            print('DELETED')
             await database.execute(orders_model.update().where(
                 orders_model.c.order_id == order['order_id']),
                 values={'assign_time': None, 'courier_id': None})
