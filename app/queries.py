@@ -66,7 +66,7 @@ GET_COURIER_PRICE_QUERY = """
 """
 
 
-GET_UNSUITABLE_BY_TIME_ORDERS = """
+GET_UNSUITABLE_BY_TIME_ORDERS_QUERY = """
     select * from orders
         inner join orders_intervals oi 
             on oi.order_id = orders.order_id 
@@ -77,3 +77,12 @@ GET_UNSUITABLE_BY_TIME_ORDERS = """
             AND NOT (oi.time_from <= ci.time_to AND oi.time_to >= ci.time_from)
 """
 
+
+GET_COMPLETED_ORDERS_FOR_COURIER_QUERY = """
+    SELECT o.region, o.assign_time, o.completed_at FROM orders o
+    WHERE o.courier_id = :courier_id
+        AND o.completed_at IS NOT NULL
+        AND o.assign_time IS NOT NULL
+    group by o.region, o.assign_time, o.completed_at
+    order by o.region ASC, o.completed_at DESC
+"""

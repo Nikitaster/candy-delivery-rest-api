@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List
 import re
 
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, validator
 
 
 class Courier(BaseModel):
@@ -20,11 +20,14 @@ class Courier(BaseModel):
                 raise ValueError(times)
         return v
 
+
 class CourierAssign(BaseModel):
     courier_id: int
 
+
 class CouriersList(BaseModel):
     list_couriers: List[Courier] = Field(..., alias='data')
+
 
 class Order(BaseModel):
     order_id: int
@@ -42,10 +45,12 @@ class Order(BaseModel):
                 raise ValueError(times)
         return v
 
+
 class OrderComplete(BaseModel):
     order_id: int
     courier_id: int
     completed_at: datetime = Field(..., alias='complete_time')
+
 
 class OrdersList(BaseModel):
     list_orders: List[Order] = Field(..., alias='data')

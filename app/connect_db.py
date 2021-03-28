@@ -7,7 +7,6 @@ from sqlalchemy.ext.declarative import declarative_base
 
 from conf import DATABASE_URL
 
-
 database = databases.Database(DATABASE_URL)
 
 metadata = MetaData()
@@ -20,7 +19,6 @@ couriers_types_model = Table(
     Column('weight', Float, nullable=False),
 )
 
-
 couriers_model = Table(
     'couriers',
     metadata,
@@ -31,7 +29,6 @@ couriers_model = Table(
     Column('rating', Float, nullable=True),
     Column('earnings', Float, nullable=True),
 )
-
 
 orders_model = Table(
     'orders',
